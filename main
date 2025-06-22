@@ -1,0 +1,536 @@
+#! /usr/bin/bash
+#echo apt upgrade && apt update
+
+#var= cat README
+#echo $var
+
+#Variables for parsing README
+potentialStandard=0
+potentialAdmin=0
+
+#Arrays handling users
+standard_users_array=()
+allowed_admin_users_array=()
+found_admin_users_array=()
+all_allowed_users_array=()
+all_found_users_array=()
+missing_users_array=()
+different_users_array=()
+unauthorized_users_array=()
+
+
+#Arrays handling files
+check_files=()
+
+# Variables for colored text
+BG_BLUE='\033[0;44m'
+BLUE='\033[1;34m'
+RESET='\e[0m'
+BOLD=$(tput bold)
+NORMAL=$(tput sgr0)
+
+# Check For Permission
+
+if [ ${EUID} -ne 0 ]; then
+	echo 'Permission Denied'
+	exit
+fi
+
+clear
+sleep 1
+clear
+
+function installNecessary(){
+	apt install gnome-terminal -y
+	apt install gedit -y
+	apt install whiptail -y
+	apt install whereami -y
+	apt install grep -y
+	apt install aptitude
+}
+
+function update() {
+	gnome-terminal -- bash -c "sudo apt-get update -y;sudo apt upgrade -y; echo "done"; exec bash" & disown
+}
+#Improve (Works) OPTIMIZE
+function checkAdminTerms () {
+	if [ "${CURRENT_LINE,,}" = "admins:" -o "${CURRENT_LINE,,}" = "authorized administrators:" -o "${CURRENT_LINE,,}" = "administrators" -o "${CURRENT_LINE,,}" = "admins" -o "${CURRENT_LINE,,}" = "authorized administrators" ]; then
+    	local result=1
+	else
+    	local result=0    
+	fi    
+	return $result
+}
+#Improve (Works) OPTIMIZE
+function checkAuthTerms () {
+	if [ "${CURRENT_LINE,,}" = "standard users:" -o "${CURRENT_LINE,,}" = "authorized users:" -o "${CURRENT_LINE,,}" = "authorized" -o "${CURRENT_LINE,,}" = "standard" -o "${CURRENT_LINE,,}" = "authorized users" -o "${CURRENT_LINE,,}" = "standard users:" ]; then
+    	local result=1
+	else
+    	local result=0    
+	fi    
+	return $result
+}
+#Improve (Main Directories Printed and sub (not 3rd))
+function getFiles() {
+	checkFiles=$@
+	for users in $checkFiles; do
+    	echo
+    	echo -e "${BOLD}$users${RESET}"
+    	echo
+    	ls /home/$users | awk -F':' '{ print $1}' >> DIRECTORIES.txt
+
+    	while read CURRENT_LINE
+    	do
+        	if [ -d /home/$users/$CURRENT_LINE ]; then
+            	echo -e "${BLUE}${CURRENT_LINE}${RESET}"
+            	ls /home/$users/$CURRENT_LINE | awk -F':' '{ print $1}' >> DIRECTORIES2.txt
+
+
+            	while read CURRENT_LINE2
+            	do
+                	if [ -d /home/$users/$CURRENT_LINE/$CURRENT_LINE2 ]; then
+                    	echo -e "${BLUE} -  ${CURRENT_LINE2}${RESET}"
+                	else
+                    	echo " - " $CURRENT_LINE2
+                	fi
+            	done < "DIRECTORIES2.txt"
+            	rm DIRECTORIES2.txt
+
+        	else
+            	echo $CURRENT_LINE
+        	fi
+
+    	done < "DIRECTORIES.txt"
+    	rm DIRECTORIES.txt
+	echo
+	done
+}
+function getAdmins() {
+	column=1
+	while [[ $(getent group sudo | cut -d':' -f 4 | cut -d',' -f $column) ]]
+	do
+    	adminuser=$(getent group sudo | cut -d':' -f 4 | cut -d',' -f $column)
+    	found_admin_users_array+=( "$adminuser" )
+    	column=$(( $column + 1 ))
+	done
+	echo ${found_admin_users_array[@]}
+    
+}
+#Improve (Works)
+function getUsers() {
+	echo "Getting Users"
+	while read CURRENT_LINE
+	do
+    	checkAdminTerms $CURRENT_LINE
+    	isAdmin=$?
+    	checkAuthTerms $CURRENT_LINE
+    	isAuthorized=$?
+    	if [ $isAdmin = 1 ]; then
+        	potentialAdmin+=1
+    	elif [ "$CURRENT_LINE" != "" -a $potentialAdmin -eq 1 -a "$isAuthorized" != 1  ]; then
+        	#echo "Potential Admin"
+        	adminUser=($(echo  $CURRENT_LINE | cut -d ' ' -f 1))
+        	allowed_admin_users_array+=( $adminUser )
+        	all_allowed_users_array+=( ${adminUser,,} )
+    	elif [ "$isAuthorized" = 1 ]; then
+        	#echo "NO"
+        	potentialAdmin=$(( potentialAdmin - 1))
+    	fi
+    	if [ $isAuthorized = 1 ]; then
+        	potentialStandard+=1
+    	elif [ $potentialStandard -eq 1 -a "$CURRENT_LINE" != "" ]; then
+        	#echo "Potential User"
+        	standard_users_array+=( "$CURRENT_LINE" )
+        	all_allowed_users_array+=( "${CURRENT_LINE,,}" )
+    	elif [ $potentialStandard -eq 1 -a "$CURRENT_LINE" == "" ]; then
+        	potentialStandard=$(( potentialStandard - 1))
+    	fi
+    
+	done < $1
+
+	#Get Unauthorized and Missing Users
+
+	getent passwd {1000..6000} | awk -F':' '{ print $1}' >> FOUNDUSERS.txt
+
+	while read CURRENT_LINE
+	do
+    	all_found_users_array+=(  "${CURRENT_LINE,,}" )
+    	# echo "$CURRENT_LINE" | awk '{print tolower($0)}'
+	done < "FOUNDUSERS.txt"
+	rm FOUNDUSERS.txt
+
+	#
+	echo ${all_found_users_array[@]} ${all_allowed_users_array[@]} | tr ' ' '\n' | sort | uniq -u -i >> DIFFERENT.txt
+
+	while read CURRENT_LINE
+	do
+    	different_users_array+=( "$CURRENT_LINE" )
+    	#echo "$CURRENT_LINE"
+	done < "DIFFERENT.txt"
+	rm DIFFERENT.txt
+	#
+
+	for userUnAuth in ${different_users_array[@]}; do
+	if [[ " ${all_found_users_array[*]}  " =~ " ${userUnAuth} " ]]; then
+    	#echo $userUnAuth "Unauthorized"
+    	unauthorized_users_array+=(  "${userUnAuth,,}" )
+	else
+    	#echo $userUnAuth " Not On "
+    	different_users_array+=( "${userUnAuth,,}" )
+    	missing_users_array+=(  "${userUnAuth,,}" )    
+	fi
+    
+done
+}
+#Improve (Works)
+function printUsers() {
+	printUsers=$@
+	printf "%s\n" $printUsers >> users.txt
+	LINE=0
+	while read CURRENT_LINE
+	do
+    	echo " $LINE: $CURRENT_LINE"
+    	(( LINE += 1 ))
+	done < users.txt
+	rm users.txt
+}
+
+
+#Improve (NOT FULLY IMPLEMENTED)
+function accessUserArray() {
+	echo
+	echo "--------------------"
+	echo
+	local -n access_array="$1"
+	#echo "${access_array[@]}"
+	printUsers "${access_array[@]}"
+	echo
+	length="${#access_array[@]}"
+	read userNum
+	if [ $userNum -ge $length ]; then
+    	echo "User not found"
+	else
+    	echo "(gl - groups list, ga - groups add, gr - groups remove)"
+
+    	if [[ " ${missing_users_array[*]} " =~ [[:space:]]${access_array[$userNum]}[[:space:]] ]]; then
+            	read -p "User ${access_array[$userNum]} not found, create? (Y/N): " confirm
+        	if [ $confirm = "y" -o $confirm = "Y" ]; then
+            	useradd ${access_array[$userNum]}
+            	echo "+${access_array[$userNum]} added"
+        	else
+            	echo "${access_array[$userNum]} not changed"
+        	fi
+    	else
+        	echo ${access_array[$userNum]}
+    	fi
+   	 
+	fi
+}
+#pretty good
+function modifyUserArray() {
+	read -p "Which user list to modify: " input
+	case "${input,,}" in
+	"a")
+    	accessUserArray all_allowed_users_array
+    	;;
+	"u")
+    	accessUserArray unauthorized_users_array
+    	;;
+	"m")
+    	accessUserArray missing_users_array
+    	;;
+	"f")
+    	accessUserArray all_found_users_array
+    	;;
+	*)
+    	echo "Moving on"
+    	;;
+	esac
+}
+
+
+
+#Firewall Functions
+function toggleFirewall() {
+	ufw status
+	if [ "$1" == "" ]; then
+    	read -p "Toggle? (O/F): " toggle
+	else
+    	toggle=$1
+	fi
+    
+	echo
+	if [ "${toggle,,}" == "o" ]; then
+    	ufw enable
+	elif [ "${toggle,,}" == "f" ]; then
+    	ufw disable
+	else
+    	exit
+	fi
+	echo
+	ufw status
+}
+# Permit Root Login
+function rootLogin() {
+	sed -i 's/PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+}
+function emptyPassword() {
+	sed -i 's/PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+}
+function authenticate() {
+	sed -i 's/!authenticate.*/authenticate/' /etc/sudoers
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### works optimize
+### 6 System Maintenence
+### 6.1 System File Permission
+function secureSystemFilePermissions() {
+
+	if [ $( ls /etc | grep -cw 'passwd' ) -ge 1 ]; then
+    	chown root:root /etc/passwd
+    	chmod 644 /etc/passwd
+	fi
+	if [ $( ls /etc | grep -cw 'passwd-' ) -ge 1 ]; then
+    	chown root:root /etc/passwd-
+    	chmod 644 /etc/passwd-
+	fi
+	if [ $( ls /etc | grep -cw 'group' ) -ge 1 ]; then
+    	chown root:root /etc/group
+    	chmod 644 /etc/group
+	fi
+	if [ $( ls /etc | grep -cw 'group-' ) -ge 1 ]; then
+    	chown root:root /etc/group-
+    	chmod 644 /etc/group-
+	fi
+	if [ $( ls /etc | grep -cw 'shadow' ) -ge 1 ]; then
+    	chown root:root /etc/shadow
+    	chmod 640 /etc/shadow
+	fi
+	if [ $( ls /etc | grep -cw 'shadow-' ) -ge 1 ]; then
+    	chown root:root /etc/shadow-
+    	chmod 640 /etc/shadow-
+	fi
+	if [ $( ls /etc | grep -cw 'gshadow' ) -ge 1 ]; then
+    	chown root:root /etc/gshadow
+    	chmod 640 /etc/gshadow
+	fi
+	if [ $( ls /etc | grep -cw 'gshadow-' ) -ge 1 ]; then
+    	chown root:root /etc/gshadow-
+    	chmod 640 /etc/gshadow-
+	fi
+}
+
+
+
+
+
+
+### Services
+### Special Purpose Services 2.2
+### Works (Pretty optomized) needs more services
+### SSP
+function whiptailSpecialPurposeServices() {
+	CHOICES_SPS=$(whiptail --checklist "Select SSP To Remove:" 20 50 12 \
+    	"xserver-xorg" "(X Windows System)"  off \
+    	"avahi-daemon" "(Avahi Server)"  off \
+    	"cups" "(CUPS)" off \
+    	"isc-dhcp-server" "(DHCP)" off \
+    	"slapd" "(LDAP)" off \
+    	"nfs-kernal-server" "(NFS)" off \
+    	"bind9" "(DNS)" off \
+    	"vsftpd" "(FTP)" off \
+    	"apache2" "(HTTP)" off \
+    	"dovecot-imapd" "(IMAP)" off \
+    	"pop3d" "(POP3)" off \
+    	"samba" "(Samba)" off \
+    	"squid" "(HTTP Proxy Server)" off \
+    	"snmp" "(SNMP)" off \
+    	"nis" "(NIS)" off \
+    	"nginx" "(Nginx)" off \
+    	3>&1 1>&2 2>&3)
+   	 
+	for CHOICE in $CHOICES_SPS; do
+        	temp=$( echo $CHOICE | sed 's/.\(.*\)/\1/' | sed 's/\(.*\)./\1/')
+        	#echo $temp
+       	if [ $( dpkg --get-selections | grep -v -e purge -e deinstall | grep ^$temp -c ) -ge 1 ]; then
+           	echo "REMOVING $CHOICE"
+           	apt-get autopurge $temp* -y > /dev/null 2>&1
+       	else
+           	echo "$CHOICE not found"
+       	fi;
+   	done    
+}
+### SERVICE CLIENTS
+function whiptailServiceClients(){
+	CHOICES_SC=$(whiptail --checklist "Select SC To Remove:" 20 50 12 \
+    	"nis" "(NIS Client)"  off \
+    	"rsh-client" "(RSH Client)"  off \
+    	"talk" "(Talk Client)" off \
+    	"telnet" "(Telnet Client)" off \
+    	"ldad-utils" "(LDAP Client)" off \
+    	"rpc-bind" "(RPC)" off \
+    	3>&1 1>&2 2>&3)
+
+	for CHOICE in $CHOICES_SC; do
+        	temp=$( echo $CHOICE | sed 's/.\(.*\)/\1/' | sed 's/\(.*\)./\1/' )
+           	#echo $temp
+       	if [ $( dpkg --get-selections | grep -v -e purge -e deinstall | grep ^$temp -c ) -ge 1 ]; then
+           	echo "REMOVING $CHOICE"
+           	apt-get autopurge $temp* -y > /dev/null 2>&1
+       	fi;
+   	done
+}
+
+
+#Crack
+#Hydra
+#Telenetd
+#apache2
+
+
+function getFile() {
+	if ! [ -e usersList.txt ]; then
+    	touch usersList.txt
+	fi
+	chmod 777 usersList.txt
+	nano usersList.txt
+	echo
+	read -p "Continue? (Y/N): " confirm
+	if [[ "${confirm,,}" == y || "${confirm,,}" == "yes" ]]; then
+    	echo "Proceeding"
+   	 
+	else
+    	rm usersList.txt
+    	exit 1
+	fi
+}
+
+function terminalPrintUsers() {
+	echo
+	echo "Users from the usersList.txt"
+	echo "Authorized Administrators:"
+	printUsers ${allowed_admin_users_array[@]}
+	echo
+	echo "Authorized Users:"
+	printUsers ${standard_users_array[@]}
+	echo
+	echo "--------------------"
+	echo
+	echo
+	echo "(A) All Authorized Users:"
+	printUsers ${all_allowed_users_array[@]}
+	echo
+	echo "(F) All Found Users:"
+	printUsers ${all_found_users_array[@]}
+	echo
+	echo "(U) Unauthorized Users:"
+	printUsers ${unauthorized_users_array[@]}
+	echo
+	echo "(M) Missing Users:"
+	printUsers ${missing_users_array[@]}
+	echo
+	echo
+}
+#Setup Functions
+function manual() {
+	getFile
+	sed -i 's/(you)//g' usersList.txt
+	sed -i '/^$/d' usersList.txt
+	sed -i 's/- //g' usersList.txt
+	getUsers usersList.txt
+	rm usersList.txt
+	terminalPrintUsers
+	modifyUserArray
+    
+}
+
+
+
+#Manual mode will result in having to manually do users
+read -p "(m)Manual or (a)Automatic : " mode
+if [ "${mode,,}" = "m" ]; then
+	echo "Manual Mode Selected"    
+	echo
+	read -p "Interface or Terminal (I/T): " ui
+	if [ "${ui,,}" = "i" ]; then
+   	 
+    	#choice=$(whiptail --title "Manual Interface" --menu "" 0 0 0 1 "Users" 2 "Policies" 3 "Firewall" 4 "Groups" 5 "Software" 3>&1 1>&2 2>&3 3>&- )
+   	 
+    	echo "NOT IMPLEMENTED"
+    	#echo $choice
+    	exit
+	elif [ "${ui,,}" = "t" ]; then
+    	manual
+	else
+    	echo
+    	exit
+	fi
+    
+#AUTO NOT IMPLEMENTED YET
+elif [ "${mode,,}" = "a" ]; then
+	echo
+	#echo "Auto not implemented"
+	#sed -i 's/- //g' usersList.txt
+	#getUsers usersList.txt    
+	#terminalPrintUsers
+	whiptailSpecialPurposeServices
+	###whiptailServiceClients
+else
+	exit
+fi
+
+
+
+    
+
+
+# Remove Authorized users from sudo group
+#Delete Unauthorized Users (Check files first *2)
+
+#Change user Permissions (*4)
+#Find system users
+#GROUPS
+#Change user group
+#Only accurate way to determine groups are below
+#getent group {group_id} or {userName}
+#Groups {userName}
+#usermod -g {group} {userName}	(Change users primary group)
+#min pass len
+
+
+#Password Polciies
+
+#Updates
+
+#Ports
+
+
+# PARSING Forensic Questions
+
+
+
+
+
+
+
+
