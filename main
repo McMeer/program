@@ -35,7 +35,6 @@ if [ ${EUID} -ne 0 ]; then
 	echo 'Permission Denied'
 	exit
 fi
-
 clear
 sleep 1
 clear
@@ -55,18 +54,18 @@ function update() {
 #Improve (Works) OPTIMIZE
 function checkAdminTerms () {
 	if [ "${CURRENT_LINE,,}" = "admins:" -o "${CURRENT_LINE,,}" = "authorized administrators:" -o "${CURRENT_LINE,,}" = "administrators" -o "${CURRENT_LINE,,}" = "admins" -o "${CURRENT_LINE,,}" = "authorized administrators" ]; then
-    	local result=1
+    		local result=1
 	else
-    	local result=0    
+    		local result=0    
 	fi    
 	return $result
 }
 #Improve (Works) OPTIMIZE
 function checkAuthTerms () {
-	if [ "${CURRENT_LINE,,}" = "standard users:" -o "${CURRENT_LINE,,}" = "authorized users:" -o "${CURRENT_LINE,,}" = "authorized" -o "${CURRENT_LINE,,}" = "standard" -o "${CURRENT_LINE,,}" = "authorized users" -o "${CURRENT_LINE,,}" = "standard users:" ]; then
-    	local result=1
+	if [ "${CURRENT_LINE,,}" = "standard users:" -o "${CURRENT_LINE,,}" = "authorized users:" -o "${CURRENT_LINE,,}" = "authorized" -o "${CURRENT_LINE,,}" = "users:" -o "${CURRENT_LINE,,}" = "authorized users" -o "${CURRENT_LINE,,}" = "standard users:" ]; then
+    		local result=1
 	else
-    	local result=0    
+    		local result=0    
 	fi    
 	return $result
 }
@@ -89,9 +88,9 @@ function getFiles() {
             	while read CURRENT_LINE2
             	do
                 	if [ -d /home/$users/$CURRENT_LINE/$CURRENT_LINE2 ]; then
-                    	echo -e "${BLUE} -  ${CURRENT_LINE2}${RESET}"
+                    		echo -e "${BLUE} -  ${CURRENT_LINE2}${RESET}"
                 	else
-                    	echo " - " $CURRENT_LINE2
+                    		echo " - " $CURRENT_LINE2
                 	fi
             	done < "DIRECTORIES2.txt"
             	rm DIRECTORIES2.txt
@@ -172,12 +171,12 @@ function getUsers() {
 
 	for userUnAuth in ${different_users_array[@]}; do
 	if [[ " ${all_found_users_array[*]}  " =~ " ${userUnAuth} " ]]; then
-    	#echo $userUnAuth "Unauthorized"
-    	unauthorized_users_array+=(  "${userUnAuth,,}" )
+    		#echo $userUnAuth "Unauthorized"
+    		unauthorized_users_array+=(  "${userUnAuth,,}" )
 	else
-    	#echo $userUnAuth " Not On "
-    	different_users_array+=( "${userUnAuth,,}" )
-    	missing_users_array+=(  "${userUnAuth,,}" )    
+    		#echo $userUnAuth " Not On "
+    		different_users_array+=( "${userUnAuth,,}" )
+    		missing_users_array+=(  "${userUnAuth,,}" )    
 	fi
     
 done
@@ -208,21 +207,21 @@ function accessUserArray() {
 	length="${#access_array[@]}"
 	read userNum
 	if [ $userNum -ge $length ]; then
-    	echo "User not found"
+    		echo "User not found"
 	else
-    	echo "(gl - groups list, ga - groups add, gr - groups remove)"
+    		echo "(gl - groups list, ga - groups add, gr - groups remove)"
 
-    	if [[ " ${missing_users_array[*]} " =~ [[:space:]]${access_array[$userNum]}[[:space:]] ]]; then
-            	read -p "User ${access_array[$userNum]} not found, create? (Y/N): " confirm
-        	if [ $confirm = "y" -o $confirm = "Y" ]; then
-            	useradd ${access_array[$userNum]}
-            	echo "+${access_array[$userNum]} added"
-        	else
-            	echo "${access_array[$userNum]} not changed"
-        	fi
-    	else
-        	echo ${access_array[$userNum]}
-    	fi
+    		if [[ " ${missing_users_array[*]} " =~ [[:space:]]${access_array[$userNum]}[[:space:]] ]]; then
+            		read -p "User ${access_array[$userNum]} not found, create? (Y/N): " confirm
+        		if [ $confirm = "y" -o $confirm = "Y" ]; then
+            			useradd ${access_array[$userNum]}
+            			echo "+${access_array[$userNum]} added"
+        		else
+            			echo "${access_array[$userNum]} not changed"
+        		fi
+    		else
+        		echo ${access_array[$userNum]}
+    		fi
    	 
 	fi
 }
@@ -231,20 +230,20 @@ function modifyUserArray() {
 	read -p "Which user list to modify: " input
 	case "${input,,}" in
 	"a")
-    	accessUserArray all_allowed_users_array
-    	;;
+    		accessUserArray all_allowed_users_array
+    		;;
 	"u")
-    	accessUserArray unauthorized_users_array
-    	;;
+    		accessUserArray unauthorized_users_array
+    		;;
 	"m")
-    	accessUserArray missing_users_array
-    	;;
+    		accessUserArray missing_users_array
+    		;;
 	"f")
-    	accessUserArray all_found_users_array
-    	;;
+    		accessUserArray all_found_users_array
+    		;;
 	*)
-    	echo "Moving on"
-    	;;
+    		echo "Moving on"
+    		;;
 	esac
 }
 
@@ -254,18 +253,18 @@ function modifyUserArray() {
 function toggleFirewall() {
 	ufw status
 	if [ "$1" == "" ]; then
-    	read -p "Toggle? (O/F): " toggle
+    		read -p "Toggle? (O/F): " toggle
 	else
-    	toggle=$1
+    		toggle=$1
 	fi
     
 	echo
 	if [ "${toggle,,}" == "o" ]; then
-    	ufw enable
+    		ufw enable
 	elif [ "${toggle,,}" == "f" ]; then
-    	ufw disable
+    		ufw disable
 	else
-    	exit
+    		exit
 	fi
 	echo
 	ufw status
@@ -288,55 +287,43 @@ function authenticate() {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 ### works optimize
 ### 6 System Maintenence
 ### 6.1 System File Permission
+
 function secureSystemFilePermissions() {
 
 	if [ $( ls /etc | grep -cw 'passwd' ) -ge 1 ]; then
-    	chown root:root /etc/passwd
-    	chmod 644 /etc/passwd
+    		chown root:root /etc/passwd
+    		chmod 644 /etc/passwd
 	fi
 	if [ $( ls /etc | grep -cw 'passwd-' ) -ge 1 ]; then
-    	chown root:root /etc/passwd-
-    	chmod 644 /etc/passwd-
+    		chown root:root /etc/passwd-
+    		chmod 644 /etc/passwd-
 	fi
 	if [ $( ls /etc | grep -cw 'group' ) -ge 1 ]; then
-    	chown root:root /etc/group
-    	chmod 644 /etc/group
+    		chown root:root /etc/group
+    		chmod 644 /etc/group
 	fi
 	if [ $( ls /etc | grep -cw 'group-' ) -ge 1 ]; then
-    	chown root:root /etc/group-
-    	chmod 644 /etc/group-
+    		chown root:root /etc/group-
+    		chmod 644 /etc/group-
 	fi
 	if [ $( ls /etc | grep -cw 'shadow' ) -ge 1 ]; then
-    	chown root:root /etc/shadow
-    	chmod 640 /etc/shadow
+    		chown root:root /etc/shadow
+    		chmod 640 /etc/shadow
 	fi
 	if [ $( ls /etc | grep -cw 'shadow-' ) -ge 1 ]; then
-    	chown root:root /etc/shadow-
-    	chmod 640 /etc/shadow-
+    		chown root:root /etc/shadow-
+    		chmod 640 /etc/shadow-
 	fi
 	if [ $( ls /etc | grep -cw 'gshadow' ) -ge 1 ]; then
-    	chown root:root /etc/gshadow
-    	chmod 640 /etc/gshadow
+    		chown root:root /etc/gshadow
+    		chmod 640 /etc/gshadow
 	fi
 	if [ $( ls /etc | grep -cw 'gshadow-' ) -ge 1 ]; then
-    	chown root:root /etc/gshadow-
-    	chmod 640 /etc/gshadow-
+    		chown root:root /etc/gshadow-
+    		chmod 640 /etc/gshadow-
 	fi
 }
 
@@ -417,14 +404,22 @@ function getFile() {
 	echo
 	read -p "Continue? (Y/N): " confirm
 	if [[ "${confirm,,}" == y || "${confirm,,}" == "yes" ]]; then
-    	echo "Proceeding"
-   	 
+    		echo "Proceeding"
 	else
-    	rm usersList.txt
+    		rm usersList.txt
     	exit 1
 	fi
 }
-
+function addMissingUsers() {
+	for user in "${missing_users_array[@]}"; do
+    		sudo useradd "$user"
+	done
+}
+function deleteUnauthorizedUsers() {
+	for user in "${unauthorized_users_array[@]}"; do
+    		sudo userdel "$user"
+	done
+}
 function terminalPrintUsers() {
 	echo
 	echo "Users from the usersList.txt"
@@ -460,6 +455,35 @@ function manual() {
 	getUsers usersList.txt
 	rm usersList.txt
 	terminalPrintUsers
+    
+	read -p "Show Unauthorized Users FileS? " response
+	if [ "${response,,}" = "y" ]; then
+    		echo "Files From Unauthorized Users:"
+    		getFiles ${unauthorized_users_array[@]}
+	fi
+    
+	read -p "Delete Unauthorized Users? " response
+	if [ "${response,,}" = "y" ]; then
+    		deleteUnauthorizedUsers
+    		echo "Deleted"
+	fi
+	read -p "Add Missing Users? " response
+	if [ "${response,,}" = "y" ]; then
+        	addMissingUsers
+        	echo "Added"
+	fi
+	read -p "Toggle Firewal? " response
+	if [ "${response,,}" = "y" ]; then
+        	toggleFirewall
+        	echo "Done"
+	fi
+	read -p "Misc Hardening? " response
+	if [ "${response,,}" = "y" ]; then
+        	rootLogin
+    		emptyPasswords
+    		authenticate
+        	echo "Done"
+	fi
 	modifyUserArray
     
 }
@@ -526,11 +550,4 @@ fi
 
 
 # PARSING Forensic Questions
-
-
-
-
-
-
-
 
