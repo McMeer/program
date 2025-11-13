@@ -40,12 +40,30 @@ sleep 1
 clear
 
 function installNecessary(){
-	apt install gnome-terminal -y
-	apt install gedit -y
-	apt install whiptail -y
-	apt install whereami -y
-	apt install grep -y
-	apt install aptitude
+	dpkg -s grep > /dev/null 2>&1
+	if [ $? -eq 1 ]; then
+    		apt install grep -y
+	fi
+	dpkg -s whiptail > /dev/null 2>&1
+	if [ $? -eq 1 ]; then
+    		apt install whiptail -y
+	fi
+	dpkg -s gnome-terminal > /dev/null 2>&1
+	if [ $? -eq 1 ]; then
+    		apt install gnome-terminal -y
+	fi	
+	dpkg -s gedit > /dev/null 2>&1
+	if [ $? -eq 1 ]; then
+    		apt install gedit -y
+	fi	
+	dpkg -s whereami > /dev/null 2>&1
+	if [ $? -eq 1 ]; then
+    		apt install whereami -y
+	fi
+	dpkg -s aptitude > /dev/null 2>&1
+	if [ $? -eq 1 ]; then
+    		apt install aptitude -y
+	fi	
 }
 
 function update() {
@@ -247,6 +265,15 @@ function modifyUserArray() {
 	esac
 }
 
+function checkGroups() {
+	for standardUser in ${standard_users_array[@]}; do
+		if [ $(id -Gn $standardUser | grep -w sudo -c) -eq 1 ]; then
+			echo "$standardUser is in group sudo, removing"
+			gpasswd --delete $standardUser sudo
+			echo "removed $standardUser from group sudo"
+		fi
+	done
+}
 
 
 #Firewall Functions
@@ -400,7 +427,7 @@ function getFile() {
     	touch usersList.txt
 	fi
 	chmod 777 usersList.txt
-	nano usersList.txt
+	gedit usersList.txt &>/dev/null
 	echo
 	read -p "Continue? (Y/N): " confirm
 	if [[ "${confirm,,}" == y || "${confirm,,}" == "yes" ]]; then
@@ -438,54 +465,76 @@ function terminalPrintUsers() {
 	echo "(F) All Found Users:"
 	printUsers ${all_found_users_array[@]}
 	echo
-	echo "(U) Unauthorized Users:"
-	printUsers ${unauthorized_users_array[@]}
-	echo
-	echo "(M) Missing Users:"
-	printUsers ${missing_users_array[@]}
-	echo
+	if [ ${#unauthorized_users_array[@]} -ge 1 ]; then
+		echo "(U) Unauthorized Users:"
+		printUsers ${unauthorized_users_array[@]}
+		echo
+	fi
+	if [ ${#missing_users_array[@]} -ge 1 ]; then
+		echo "(M) Missing Users:"
+		printUsers ${missing_users_array[@]}
+		echo
+	fi
+	
 	echo
 }
 #Setup Functions
 function manual() {
+
+	#Installs Dependencies
+	installNecessary
+	#clear
 	getFile
 	sed -i 's/(you)//g' usersList.txt
+	sed -i '/\t/d' usersList.txt
 	sed -i '/^$/d' usersList.txt
 	sed -i 's/- //g' usersList.txt
+	
+	
 	getUsers usersList.txt
-	rm usersList.txt
+	#rm usersList.txt
 	terminalPrintUsers
     
-	read -p "Show Unauthorized Users FileS? " response
-	if [ "${response,,}" = "y" ]; then
-    		echo "Files From Unauthorized Users:"
-    		getFiles ${unauthorized_users_array[@]}
-	fi
     
-	read -p "Delete Unauthorized Users? " response
-	if [ "${response,,}" = "y" ]; then
-    		deleteUnauthorizedUsers
-    		echo "Deleted"
+    	if [ ${#unauthorized_users_array[@]} -ge 1 ]; then
+    		read -p "View Files From Unauthorized Users (Y/N) " response
+		if [ "${response,,}" = "y" ]; then
+    			echo "Files From Unauthorized Users:"
+    			getFiles ${unauthorized_users_array[@]}
+		fi
+    		read -p "Delete Unauthorized Users (Y/N) " response
+		if [ "${response,,}" = "y" ]; then
+    			deleteUnauthorizedUsers
+    			echo "Deleted"
+		fi
+    	fi
+	
+	if [ ${#missing_users_array[@]} -ge 1 ]; then
+		read -p "Add Missing Users (Y/N) " response
+		if [ "${response,,}" = "y" ]; then
+        		addMissingUsers
+        		echo "Added"
+		fi
 	fi
-	read -p "Add Missing Users? " response
-	if [ "${response,,}" = "y" ]; then
-        	addMissingUsers
-        	echo "Added"
-	fi
-	read -p "Toggle Firewal? " response
+	
+	read -p "Toggle Firewall (Y/N) " response
 	if [ "${response,,}" = "y" ]; then
         	toggleFirewall
         	echo "Done"
 	fi
-	read -p "Misc Hardening? " response
+	read -p "Misc Hardening (Y/N) " response
 	if [ "${response,,}" = "y" ]; then
         	rootLogin
     		emptyPasswords
     		authenticate
         	echo "Done"
 	fi
-	modifyUserArray
-    
+	#modifyUserArray
+    	read -p "Delete "usersList.txt" (Y/N) " response
+	if [ "${response,,}" = "y" ]; then
+        	rm usersList.txt
+	fi
+	checkGroups
 }
 
 
@@ -532,7 +581,7 @@ fi
 #Delete Unauthorized Users (Check files first *2)
 
 #Change user Permissions (*4)
-#Find system users
+#Find system usersinstallNecessary
 #GROUPS
 #Change user group
 #Only accurate way to determine groups are below
@@ -550,4 +599,3 @@ fi
 
 
 # PARSING Forensic Questions
-
